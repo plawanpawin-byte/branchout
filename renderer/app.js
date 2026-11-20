@@ -252,8 +252,8 @@ function showOutline() {
   document.body.append(back);
 }
 const cleanNode = (n, depth = 0) => ({ id: String(n.id || uid()), text: String(n.text ?? ''), collapsed: !!n.collapsed, color: /^#[0-9a-f]{6}$/i.test(n.color) ? n.color : '', note: String(n.note || ''), icon: ICONS.includes(n.icon) ? n.icon : '', kids: depth > 60 || !Array.isArray(n.kids) ? [] : n.kids.map((k) => cleanNode(k, depth + 1)) });
-async function openDoc() {
-  const f = (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; if (!f) return;
+async function openDoc(dropped) {
+  const f = (dropped && dropped.data) ? dropped : (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; if (!f) return;
   try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root: cleanNode(d.root) }; fileName = f.name; sel = doc.root.id; undoS = []; redoS = []; render(); fit(); }
   catch (e) { toast('Cannot open: ' + e.message); }
 }
@@ -309,3 +309,9 @@ function present() {
 })();
 render(); setTimeout(fit, 30);
 window.addEventListener('resize', fit);
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  const f = [...(e.dataTransfer?.files || [])].find((x) => /.(branchout|json)$/i.test(x.name)); if (!f) { toast('Drop a .branchout file to open it'); return; }
+  openDoc({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+});
