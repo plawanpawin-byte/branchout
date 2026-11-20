@@ -229,7 +229,8 @@ svg.addEventListener('pointerup', () => { drag = null; });
 svg.addEventListener('dblclick', (ev) => { const node = ev.target.closest('[data-id]'); if (node) { sel = node.dataset.id; editSel(); } });
 svg.addEventListener('wheel', (ev) => { ev.preventDefault(); const r = svg.getBoundingClientRect(); if (ev.ctrlKey || ev.metaKey) zoomBy(ev.deltaY < 0 ? 1.1 : 1 / 1.1, ev.clientX - r.left, ev.clientY - r.top); else { panX -= ev.deltaX; panY -= ev.deltaY; applyView(); } }, { passive: false });
 document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input,textarea')) return;
+  if (e.target.matches('input,textarea') || document.querySelector('.modal-back')) return;
+  if (!e.ctrlKey && !e.metaKey && e.target.matches('select,button,[contenteditable]')) return;
   const k = e.key;
   if (k === 'Tab') { e.preventDefault(); addChild(); }
   else if (k === 'Enter') { e.preventDefault(); addSibling(); }
