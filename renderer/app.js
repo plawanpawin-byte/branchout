@@ -198,7 +198,7 @@ function editSel() {
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); done(); } if (e.key === 'Escape') back.remove(); });
   document.body.append(back); ta.focus(); ta.select();
 }
-function newDoc() { if (count(doc.root) > 1 && !confirm('Discard the current map?')) return; doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; redoS = []; fileName = ''; render(); fit(); }
+function newDoc() { if (count(doc.root) > 1 && !confirm('Discard the current map?')) return; doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; fileName = ''; render(); fit(); }
 function move(key) {
   const f = find(sel); if (!f) return; const n = f.n;
   const dirOf = n._dir || 1; // side of the root
@@ -254,13 +254,13 @@ function showOutline() {
 const cleanNode = (n, depth = 0) => ({ id: String(n.id || uid()), text: String(n.text ?? ''), collapsed: !!n.collapsed, color: /^#[0-9a-f]{6}$/i.test(n.color) ? n.color : '', note: String(n.note || ''), icon: ICONS.includes(n.icon) ? n.icon : '', kids: depth > 60 || !Array.isArray(n.kids) ? [] : n.kids.map((k) => cleanNode(k, depth + 1)) });
 async function openDoc(dropped) {
   const f = (dropped && dropped.data) ? dropped : (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; if (!f) return;
-  try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root: cleanNode(d.root) }; fileName = f.name; sel = doc.root.id; undoS = []; redoS = []; render(); fit(); }
+  try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root: cleanNode(d.root) }; fileName = f.name; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; render(); fit(); }
   catch (e) { toast('Cannot open: ' + e.message); }
 }
 async function saveDoc() {
   const clean = (n) => ({ id: n.id, text: n.text, collapsed: n.collapsed, color: n.color, note: n.note, icon: n.icon || '', kids: n.kids.map(clean) });
   const r = await window.host.saveFile({ name: (doc.title || 'map') + '.branchout', filters: [['Branchout map', ['branchout']]], data: new TextEncoder().encode(JSON.stringify({ title: doc.title, layout: doc.layout || 'map', root: clean(doc.root) }, null, 1)) });
-  if (r) { fileName = r.name; toast('Saved ' + r.name); renderStatus(); }
+  if (r) { savedSnap = snapshot(); fileName = r.name; toast('Saved ' + r.name); renderStatus(); }
 }
 function exportSvgString() {
   const b = lastBounds, pad = 30;
@@ -315,3 +315,7 @@ window.addEventListener('drop', async (e) => {
   const f = [...(e.dataTransfer?.files || [])].find((x) => /.(branchout|json)$/i.test(x.name)); if (!f) { toast('Drop a .branchout file to open it'); return; }
   openDoc({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
 });
+
+let savedSnap = null;
+setTimeout(() => { if (savedSnap === null) savedSnap = snapshot(); }, 0);
+window.addEventListener('beforeunload', (e) => { if (savedSnap !== null && snapshot() !== savedSnap) { e.preventDefault(); e.returnValue = ''; } });
