@@ -172,11 +172,11 @@ function renderRight() {
   right.append(h('label', { class: 'field' }, 'Layout', lsel));
   const f = sel && find(sel); if (!f) return; const n = f.n;
   right.append(h('h3', { text: 'Topic' }));
-  const ta = h('textarea', { rows: 3, style: 'width:100%' }); ta.value = n.text; ta.addEventListener('focus', commit, { once: true }); ta.addEventListener('input', () => { n.text = ta.value; layoutOnly(); });
+  const ta = h('textarea', { rows: 3, style: 'width:100%', 'aria-label': 'Node text' }); ta.value = n.text; ta.addEventListener('focus', commit, { once: true }); ta.addEventListener('input', () => { n.text = ta.value; layoutOnly(); });
   right.append(ta);
-  right.append(h('h3', { text: 'Color' }), h('div', { class: 'swatches' }, [h('button', { title: 'Default', style: 'background:#2b2b2b', onclick: () => { commit(); n.color = ''; render(); } }), ...COLORS.map((c) => h('button', { style: `background:${c}`, onclick: () => { commit(); n.color = c; render(); } }))]));
-  right.append(h('h3', { text: 'Icon' }), h('div', { class: 'swatches' }, [h('button', { title: 'None', style: 'background:#2b2b2b;color:#aaa;font-size:12px', text: '\u00D7', onclick: () => { commit(); n.icon = ''; render(); } }), ...ICONS.map((c) => h('button', { style: 'background:#333;color:#e8e8e8;font-size:14px', text: c, class: n.icon === c ? 'on' : '', onclick: () => { commit(); n.icon = c; render(); } }))]));
-  const note = h('textarea', { rows: 4, style: 'width:100%', placeholder: 'Notes' }); note.value = n.note; note.addEventListener('focus', commit, { once: true }); note.addEventListener('input', () => { n.note = note.value; });
+  right.append(h('h3', { text: 'Color' }), h('div', { class: 'swatches' }, [h('button', { title: 'Default', style: 'background:#2b2b2b', onclick: () => { commit(); n.color = ''; render(); } }), ...COLORS.map((c) => h('button', { 'aria-label': 'Color ' + c, title: 'Color ' + c, style: `background:${c}`, onclick: () => { commit(); n.color = c; render(); } }))]));
+  right.append(h('h3', { text: 'Icon' }), h('div', { class: 'swatches' }, [h('button', { title: 'None', style: 'background:#2b2b2b;color:#aaa;font-size:12px', text: '\u00D7', onclick: () => { commit(); n.icon = ''; render(); } }), ...ICONS.map((c) => h('button', { 'aria-label': 'Icon ' + c, style: 'background:#333;color:#e8e8e8;font-size:14px', text: c, class: n.icon === c ? 'on' : '', onclick: () => { commit(); n.icon = c; render(); } }))]));
+  const note = h('textarea', { rows: 4, style: 'width:100%', placeholder: 'Notes', 'aria-label': 'Notes' }); note.value = n.note; note.addEventListener('focus', commit, { once: true }); note.addEventListener('input', () => { n.note = note.value; });
   note.addEventListener('blur', render);
   right.append(h('h3', { text: 'Notes' }), note);
   right.append(h('h3', { text: 'Shortcuts' }), h('div', { class: 'muted', style: 'font-size:12px;line-height:1.6', text: 'Tab: add child\nEnter: add sibling\nF2 or double-click: edit\nDelete: remove\nSpace: fold\nArrows: move selection\nScroll: pan. Ctrl+scroll: zoom' }));
@@ -192,7 +192,7 @@ function del() { const f = find(sel); if (!f || !f.parent) { toast('The central 
 function toggleCollapse() { const f = find(sel); if (!f || !f.n.kids.length) return; commit(); f.n.collapsed = !f.n.collapsed; render(); }
 function editSel() {
   const f = find(sel); if (!f) return; const n = f.n;
-  const ta = h('textarea', { rows: 3, style: 'width:320px' }); ta.value = n.text;
+  const ta = h('textarea', { rows: 3, style: 'width:320px', 'aria-label': 'Node text' }); ta.value = n.text;
   const done = () => { commit(); n.text = ta.value.trim() || 'Topic'; back.remove(); render(); };
   const back = h('div', { class: 'modal-back' }, h('div', { class: 'modal' }, h('h2', { text: 'Edit topic' }), ta, h('div', { class: 'row', style: 'justify-content:flex-end' }, btn('Cancel', () => back.remove()), btn('OK', done, 'primary'))));
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); done(); } if (e.key === 'Escape') back.remove(); });
@@ -246,7 +246,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- files / export ----------
 function toOutline(n, d = 0) { return '  '.repeat(d) + '- ' + n.text.replace(/\n/g, ' ') + '\n' + (n.note ? '  '.repeat(d + 1) + '> ' + n.note.replace(/\n/g, ' ') + '\n' : '') + n.kids.map((k) => toOutline(k, d + 1)).join(''); }
 function showOutline() {
-  const ta = h('textarea', { rows: 16, style: 'width:480px;font-family:Consolas,monospace', readonly: true }); ta.value = toOutline(doc.root);
+  const ta = h('textarea', { 'aria-label': 'Exported text', rows: 16, style: 'width:480px;font-family:Consolas,monospace', readonly: true }); ta.value = toOutline(doc.root);
   const back = h('div', { class: 'modal-back' }, h('div', { class: 'modal' }, h('h2', { text: 'Outline' }), ta, h('div', { class: 'row', style: 'justify-content:flex-end' }, btn('Close', () => back.remove()),
     btn('Save as text', async () => { const r = await window.host.saveFile({ name: (doc.title || 'map') + '.md', filters: [['Markdown', ['md', 'txt']]], data: new TextEncoder().encode(toOutline(doc.root)) }); if (r) toast('Saved ' + r.name); }, 'primary'))));
   document.body.append(back);
