@@ -1,7 +1,7 @@
 {
   "name": "branchout",
   "productName": "Branchout",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Plan ideas as mind maps and outlines, then export them as images or text.",
   "main": "main.js",
   "author": "Lookout",
