@@ -1,8 +1,10 @@
-<p align="center"><img src="screenshots/banner.png" alt="Branchout" width="100%"></p>
+<p align="center"><img src="screenshots/logo.png" alt="Branchout" width="128"></p>
 
-<p align="center"><b>Mind maps and outlines</b><br>Version 1.0.3 for Windows · Free · Offline · No account</p>
+<h1 align="center">Branchout</h1>
 
-<p align="center"><a href="https://github.com/plawanpawin-byte/branchout/releases/latest"><b>Download Branchout</b></a> · <a href="https://github.com/plawanpawin-byte/Lookout">All Lookout apps</a></p>
+<p align="center"><b>Mind maps and outlines</b><br>Version 1.0.13 for Windows · Free · Offline · No account</p>
+
+<p align="center"><a href="https://github.com/plawanpawin-byte/branchout/releases/latest"><b>Download Branchout</b></a> · <a href="https://github.com/plawanpawin-byte/lookout-launcher">Lookout launcher</a> · <a href="https://github.com/plawanpawin-byte/Lookout">All Lookout apps</a></p>
 
 ---
 
@@ -12,11 +14,51 @@ Branchout is a mind-mapping app. Start with one idea in the centre, branch out w
 
 ![Branchout](screenshots/01-mind-map.png)
 
-**On this page:** [Screenshots](#see-it-in-action) · [Interface](#the-interface) · [Features](#everything-it-can-do) · [How to use it](#how-to-use-it) · [Shortcuts](#keyboard-shortcuts) · [Formats](#files-and-formats) · [Privacy](#private-by-design) · [Install](#install) · [Questions](#questions)
+**On this page:** [In plain words](#in-plain-words) · [Who it is for](#who-it-is-for) · [Try it in 3 steps](#try-it-in-3-steps) · [Screenshots](#see-it-in-action) · [Features](#everything-it-can-do) · [How to use it](#how-to-use-it) · [Privacy](#private-by-design) · [Install](#install) · [Questions](#questions)
 
-## What is new in 1.0.3
+## In plain words
 
-A refreshed interface: every toolbar button now has a clear line icon, the app's mark sits at the top left, controls share one height and spacing, panels line up in tidy grids, and the toolbar keeps every button reachable on smaller windows by switching less important buttons to icons.
+Branchout is a **mind-mapping** program. A mind map starts with one idea in the middle (for example "Holiday plan"). From it you grow branches ("Flights", "Hotels", "Food"), and from each branch you grow smaller branches. It is a way of thinking that looks like a tree and is much easier to scan than a long list.
+
+You build it mostly from the keyboard: press a key to add a topic next to or under the current one, type a name, and keep going. You can add notes, colours and icons, **collapse** branches you are not working on, and finally turn the whole map into a picture or a plain-text **outline** you can paste into an email.
+
+**Not for:** Branchout shows one idea tree. For boxes and arrows between any shapes use Chartout, and for tasks with dates use Planout.
+
+## Who it is for
+
+- **Anyone planning something**: a trip, an essay, a presentation, a project.
+- **Students** summarising a chapter as a map for revision.
+- **Writers** who start with ideas and want to turn them into a structured outline.
+
+## Try it in 3 steps
+
+1. Open Branchout and type a name for the centre topic.
+2. Press **Tab** to add a child topic under the selected one, or **Enter** to add a sibling beside it.
+3. Choose an outline export to see your map as an indented list of text.
+
+## What is new in 1.0.13
+
+A new look inspired by Google's own tools (AI Studio, Colab, Gemini): a calm dark charcoal theme, rounded pill buttons, a soft blue accent and roomier spacing. The app icon is now a colour logo so you can find Branchout at a glance in the Start menu and in the Lookout launcher. All screenshots below were taken again with the new look.
+
+## In plain words
+
+Branchout is a **mind-mapping** program. A mind map starts with one idea in the middle (for example "Holiday plan"). From it you grow branches ("Flights", "Hotels", "Food"), and from each branch you grow smaller branches. It is a way of thinking that looks like a tree and is much easier to scan than a long list.
+
+You build it mostly from the keyboard: press a key to add a topic next to or under the current one, type a name, and keep going. You can add notes, colours and icons, **collapse** branches you are not working on, and finally turn the whole map into a picture or a plain-text **outline** you can paste into an email.
+
+**Not for:** Branchout shows one idea tree. For boxes and arrows between any shapes use Chartout, and for tasks with dates use Planout.
+
+## Who it is for
+
+- **Anyone planning something**: a trip, an essay, a presentation, a project.
+- **Students** summarising a chapter as a map for revision.
+- **Writers** who start with ideas and want to turn them into a structured outline.
+
+## Try it in 3 steps
+
+1. Open Branchout and type a name for the centre topic.
+2. Press **Tab** to add a child topic under the selected one, or **Enter** to add a sibling beside it.
+3. Choose an outline export to see your map as an indented list of text.
 
 ## See it in action
 
@@ -115,7 +157,7 @@ Saves .branchout files. Exports PNG, SVG and a Markdown or plain text outline.
 
 ## Install
 
-1. Open the [latest release](https://github.com/plawanpawin-byte/branchout/releases/latest) and download the file named **Branchout-Setup-** followed by the version number and **.exe**. You can also install it from the [Lookout launcher](https://github.com/${OWNER}/lookout-launcher), which keeps it up to date.
+1. Open the [latest release](https://github.com/plawanpawin-byte/branchout/releases/latest) and download the file named **Branchout-Setup-** followed by the version number and **.exe**. You can also install it from the [Lookout launcher](https://github.com/plawanpawin-byte/lookout-launcher), which keeps it up to date.
 2. Run the installer. It installs just for you, so it does not ask for administrator rights.
 3. Windows may show a blue **Windows protected your PC** screen because these installers are not signed with a paid certificate. Click **More info**, then **Run anyway**.
 4. Open Branchout from the Start menu.
@@ -130,18 +172,40 @@ Hundreds are comfortable. The counter in the bottom bar shows how many you have.
 **Can I import from another mind-map app?**  
 Not yet. You can type or paste your topics in as you go.
 
+**What is an outline export?**  
+A text version of your map where each level is indented, ready to paste into a document or email.
+
+**How do I rename a topic?**  
+Select it and press F2, or double-click it.
+
+**How do I keep a big map readable?**  
+Select a branch and press Space to fold it away. Press Space again to open it.
+
+**What is an outline export?**  
+A text version of your map where each level is indented, ready to paste into a document or email.
+
+**How do I rename a topic?**  
+Select it and press F2, or double-click it.
+
+**How do I keep a big map readable?**  
+Select a branch and press Space to fold it away. Press Space again to open it.
+
 ## About Lookout
 
-Branchout belongs to the **[Lookout](https://github.com/plawanpawin-byte/Lookout)** family: ten small, private Windows apps for documents and media, all with the same calm grey look and the same promise that your files stay yours. Install and update them together with the [Lookout launcher](https://github.com/plawanpawin-byte/lookout-launcher).
+Branchout is part of **[Lookout](https://github.com/plawanpawin-byte/Lookout)**: ten small, private Windows apps for documents and media that share one look and one promise, that your files stay on your computer. Install and update them together with the [Lookout launcher](https://github.com/plawanpawin-byte/lookout-launcher).
 
-- **[Pageout](https://github.com/plawanpawin-byte/pageout)**: read, annotate and sign pdfs
-- **[Chartout](https://github.com/plawanpawin-byte/chartout)**: flowcharts and diagrams
-- **[Planout](https://github.com/plawanpawin-byte/planout)**: plans and gantt timelines
-- **[Frameout](https://github.com/plawanpawin-byte/frameout)**: screen design and prototypes
-- **[Cutout](https://github.com/plawanpawin-byte/cutout)**: video editing on a timeline
-- **[Shiftout](https://github.com/plawanpawin-byte/shiftout)**: convert and compress media
-- **[Castout](https://github.com/plawanpawin-byte/castout)**: record your screen
-- **[Mendout](https://github.com/plawanpawin-byte/mendout)**: repair damaged media
-- **[Tuneout](https://github.com/plawanpawin-byte/tuneout)**: record and edit audio
+| | App | What it is for | Code |
+| --- | --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/lookout-launcher/main/build/icon.png" width="32" alt="Lookout"> | **Lookout** | Install, open and update all the apps below | [GitHub](https://github.com/plawanpawin-byte/lookout-launcher) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/pageout/main/build/icon.png" width="32" alt="Pageout"> | **Pageout** | Read, annotate and sign PDFs | [GitHub](https://github.com/plawanpawin-byte/pageout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/chartout/main/build/icon.png" width="32" alt="Chartout"> | **Chartout** | Flowcharts, org charts and diagrams | [GitHub](https://github.com/plawanpawin-byte/chartout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/branchout/main/build/icon.png" width="32" alt="Branchout"> | **Branchout** | Mind maps and outlines | [GitHub](https://github.com/plawanpawin-byte/branchout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/planout/main/build/icon.png" width="32" alt="Planout"> | **Planout** | Project plans and Gantt timelines | [GitHub](https://github.com/plawanpawin-byte/planout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/frameout/main/build/icon.png" width="32" alt="Frameout"> | **Frameout** | App and web screen design with click-through prototypes | [GitHub](https://github.com/plawanpawin-byte/frameout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/cutout/main/build/icon.png" width="32" alt="Cutout"> | **Cutout** | Video editing on a timeline | [GitHub](https://github.com/plawanpawin-byte/cutout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/shiftout/main/build/icon.png" width="32" alt="Shiftout"> | **Shiftout** | Convert and compress video and audio, make GIFs | [GitHub](https://github.com/plawanpawin-byte/shiftout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/castout/main/build/icon.png" width="32" alt="Castout"> | **Castout** | Record your screen | [GitHub](https://github.com/plawanpawin-byte/castout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/mendout/main/build/icon.png" width="32" alt="Mendout"> | **Mendout** | Check and repair damaged video, audio, pictures and PDFs | [GitHub](https://github.com/plawanpawin-byte/mendout) |
+| <img src="https://raw.githubusercontent.com/plawanpawin-byte/tuneout/main/build/icon.png" width="32" alt="Tuneout"> | **Tuneout** | Record and edit audio | [GitHub](https://github.com/plawanpawin-byte/tuneout) |
 
 Released under the MIT License.
