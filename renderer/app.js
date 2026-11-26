@@ -14,7 +14,9 @@ const NS = 'http://www.w3.org/2000/svg';
 const sv = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const toast = (m) => { const t = h('div', { class: 'toast', role: 'status', text: m }); document.body.append(t); setTimeout(() => t.remove(), 2400); };
+const toast = (m, ms = 2400) => { const t = h('div', { class: 'toast', role: 'status', text: m }); document.body.append(t); setTimeout(() => t.remove(), ms); };
+// an error from the main process without Electron's "Error invoking remote method ..." wrapper
+const cleanErr = (e) => String((e && e.message) || e).replace(/Error invoking remote method '[^']*': (?:\w*Error: )?/g, '');
 // the letter of a key press, also on non-Latin keyboard layouts (Ctrl+S on a Thai layout still saves)
 const keyOf = (e) => { const k = (e.key || '').toLowerCase(); return /^[a-z]$/.test(k) || !/^Key[A-Z]$/.test(e.code || '') ? k : e.code.slice(3).toLowerCase(); };
 
@@ -27,12 +29,26 @@ let undoS = [], redoS = [];
 let zoom = 1, panX = 0, panY = 0, fileName = '';
 const ICONS = ['★', '✓', '!', '?', '⚑', '♥', '☼', '✎', '☎', '⚙', '▶', '✶'];
 function mk(text) { return { id: uid(), text, kids: [], collapsed: false, color: '', note: '', icon: '' }; }
-const snapshot = () => JSON.stringify(doc);
+// the map without the layout numbers that layout() keeps on each topic (_x, _w, _lines, ...)
+const snapshot = () => JSON.stringify(doc, (k, v) => (k[0] === '_' ? undefined : v));
 // commit(before) records an undo step; pass the snapshot taken before a change that is already made
 function commit(before = snapshot()) { undoS.push(before); if (undoS.length > 100) undoS.shift(); redoS = []; }
 function undo() { if (!undoS.length) return; redoS.push(snapshot()); doc = JSON.parse(undoS.pop()); fixSel(); render(); }
 function redo() { if (!redoS.length) return; undoS.push(snapshot()); doc = JSON.parse(redoS.pop()); fixSel(); render(); }
-function fixSel() { if (!sel || !find(sel)) sel = doc.root.id; }
+// the selection always names a topic that is on screen: a topic inside a collapsed one passes it to that topic
+function fixSel() {
+  if (!sel || !find(sel)) { sel = doc.root.id; return; }
+  const path = []; const walkTo = (n) => { path.push(n); if (n.id === sel) return true; for (const k of n.kids) if (walkTo(k)) return true; path.pop(); return false; };
+  walkTo(doc.root);
+  const c = path.findIndex((n) => n.collapsed && n.id !== sel); if (c >= 0) sel = path[c].id;
+}
+// unsaved changes: the map differs from what was last opened, saved or started, or a field holds typing not yet applied
+let savedSnap = null;
+const isDirty = () => savedSnap !== null && snapshot() !== savedSnap;
+const pendingEdit = () => [...document.querySelectorAll('[data-orig]')].some((el) => el.value !== el.dataset.orig);
+const hasUnsaved = () => isDirty() || pendingEdit();
+// before New, Open or a dropped file replaces the map
+const okToDiscard = () => !hasUnsaved() || confirm('Discard the unsaved changes to this map?');
 function find(id, n = doc.root, parent = null) { if (n.id === id) return { n, parent }; for (const k of n.kids) { const r = find(id, k, n); if (r) return r; } return null; }
 
 // ---------- icons ----------
@@ -96,7 +112,7 @@ let titleOld = null, titleSnap = null;
 function titleDone() { if (titleSnap !== null && snapshot() !== titleSnap) commit(titleSnap); titleOld = null; titleSnap = null; }
 const titleInput = h('input', { type: 'text', class: 'tbtitle', maxlength: 120, title: 'Map title', 'aria-label': 'Map title', placeholder: 'Untitled',
   onfocus: () => { if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } }, onblur: () => titleDone(),
-  oninput: (e) => { if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } doc.title = e.target.value; },
+  oninput: (e) => { if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } doc.title = e.target.value; renderStatus(); },
   onchange: (e) => { if (!e.target.value.trim()) { doc.title = 'Untitled'; e.target.value = doc.title; } },
   onkeydown: (e) => {
     e.stopPropagation();
@@ -186,11 +202,25 @@ function nodeSize(n, depth) {
   const w = Math.max(...lines.map((l) => meas.measureText(l).width)) + 24; const hh = lines.length * fs * 1.25 + 14;
   return { w: Math.max(w, 60) + (n.icon ? 24 : 0), h: hh, lines, fs };
 }
+// lines of at most maxW (in the font nodeSize set): breaks at spaces, then between words (Thai has no spaces), and a
+// word longer than the line between letters, never inside a letter with its marks
+const segWord = Intl.Segmenter ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+const segChar = Intl.Segmenter ? new Intl.Segmenter('th', { granularity: 'grapheme' }) : null;
+const words = (t) => (segWord ? [...segWord.segment(t)].map((x) => x.segment) : t.split(/(\s+)/).filter(Boolean));
+const letters = (t) => (segChar ? [...segChar.segment(t)].map((x) => x.segment) : [...t]);
 function wrapText(text, maxW) {
+  const fits = (t) => meas.measureText(t).width <= maxW;
   const out = [];
-  for (const p of text.split('\n')) {
+  for (const para of text.split(/\r?\n/)) {
     let line = '';
-    for (const w of p.split(' ')) { const t = line ? line + ' ' + w : w; if (meas.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+    for (const wd of words(para)) {
+      if (fits(line + wd)) { line += wd; continue; }
+      if (!wd.trim()) { out.push(line); line = ''; continue; } // break at a space and drop it
+      if (line.trim()) out.push(line.replace(/\s+$/, ''));
+      line = '';
+      if (fits(wd)) { line = wd; continue; }
+      for (const c of letters(wd)) { if (line && !fits(line + c)) { out.push(line); line = c; } else line += c; } // a word longer than the line
+    }
     out.push(line);
   }
   return out;
@@ -295,7 +325,9 @@ function render(panel = true) {
 }
 const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
 function applyView() { world.setAttribute('transform', `translate(${panX} ${panY}) scale(${zoom})`); }
-function zoomBy(f, cx, cy) { const r = svg.getBoundingClientRect(); cx = cx ?? r.width / 2; cy = cy ?? r.height / 2; const nz = clamp(zoom * f, 0.2, 4); panX = cx - (cx - panX) * (nz / zoom); panY = cy - (cy - panY) * (nz / zoom); zoom = nz; applyView(); renderStatus(); }
+// the smallest zoom still fits a map of a few thousand topics on screen
+const ZMIN = 0.02;
+function zoomBy(f, cx, cy) { const r = svg.getBoundingClientRect(); cx = cx ?? r.width / 2; cy = cy ?? r.height / 2; const nz = clamp(zoom * f, ZMIN, 4); panX = cx - (cx - panX) * (nz / zoom); panY = cy - (cy - panY) * (nz / zoom); zoom = nz; applyView(); renderStatus(); }
 // Fit keeps every topic clear of the floating toolbar: the map is fitted into the canvas above the bar
 const FIT = { top: 32, side: 40, gap: 16 };
 function fit() {
@@ -303,12 +335,12 @@ function fit() {
   const d = dock.getBoundingClientRect();
   const bottom = d.height ? Math.max(FIT.top, r.bottom - d.top + FIT.gap) : FIT.top;
   const iw = r.width - FIT.side * 2, ih = r.height - FIT.top - bottom;
-  zoom = clamp(Math.min(iw / Math.max(1, b.w), ih / Math.max(1, b.h)), 0.2, 1.5);
+  zoom = clamp(Math.min(iw / Math.max(1, b.w), ih / Math.max(1, b.h)), ZMIN, 1.5);
   panX = (r.width - b.w * zoom) / 2 - b.x * zoom; panY = FIT.top + (ih - b.h * zoom) / 2 - b.y * zoom; applyView(); renderStatus();
 }
 function count(n) { return 1 + n.kids.reduce((t, k) => t + count(k), 0); }
 function renderStatus() {
-  status.textContent = ''; status.append(h('span', { text: fileName || 'Not saved to a file yet' }), h('span', { class: 'grow' }), h('span', { text: count(doc.root) + ' topics' }), h('span', { text: Math.round(zoom * 100) + '%' }));
+  status.textContent = ''; status.append(h('span', { text: fileName || 'Not saved to a file yet' }), isDirty() ? h('span', { class: 'muted', text: 'Unsaved changes' }) : null, h('span', { class: 'grow' }), h('span', { text: count(doc.root) + ' topics' }), h('span', { text: Math.round(zoom * 100) + '%' }));
   zoomPct.textContent = Math.round(zoom * 100) + '%';
 }
 
@@ -381,25 +413,36 @@ function editSel() {
   if (document.querySelector('.modal-back')) return;
   const f = find(sel); if (!f) return; const n = f.n;
   const ta = h('textarea', { rows: 3, style: 'width:360px;max-width:100%', 'aria-label': 'Topic text' }); ta.value = n.text;
-  const ok = () => { close(); const before = snapshot(); n.text = ta.value.trim() || 'Topic'; if (snapshot() !== before) commit(before); render(); };
+  ta.dataset.orig = n.text; // typing not yet applied counts as unsaved (closing the window asks)
+  // OK with the text left as it was changes nothing (no undo step, and old text with spaces round it stays as it is)
+  const ok = () => { close(); if (ta.value === n.text) return; const before = snapshot(); n.text = ta.value.trim() || 'Topic'; if (snapshot() !== before) commit(before); render(); };
   const back = h('div', { class: 'modal-back' }, h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Edit topic' }, h('h2', { text: 'Edit topic' }), ta,
     h('div', { class: 'msub', text: 'Enter to finish, Shift+Enter for a new line.' }), h('div', { class: 'row mact' }, btn('Cancel', () => close()), btn('OK', ok, 'primary'))));
-  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ok(); } if (e.key === 'Escape') { e.preventDefault(); close(); } });
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ok(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    // Ctrl+S keeps the typed text and saves
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && keyOf(e) === 's') { e.preventDefault(); e.stopPropagation(); ok(); saveDoc(); }
+  });
   const close = dlgCloser(back); document.body.append(back); ta.focus(); ta.select();
 }
-function newDoc() { if (count(doc.root) > 1 && !confirm('Discard the current map?')) return; endEditing(); doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; fileName = ''; render(); fit(); }
+function newDoc() { if (!okToDiscard()) return; endEditing(); doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; redoS = []; fileName = ''; savedSnap = snapshot(); render(); fit(); }
+// arrow keys follow the picture: in the side layouts Left and Right go toward and away from the central topic and Up and
+// Down move between topics on the same side; in the Down layout Up and Down go between levels, Left and Right between siblings
 function move(key) {
-  const f = find(sel); if (!f) return; const n = f.n;
-  const dirOf = n._dir || 1; // side of the root
+  const f = find(sel); if (!f) return; const n = f.n, p = f.parent;
+  const open = (x) => (x.collapsed ? [] : x.kids);
   let target = null;
-  if (key === 'ArrowUp' || key === 'ArrowDown') {
-    const sibs = f.parent ? f.parent.kids.filter((k) => !f.parent.collapsed) : [n]; const i = sibs.indexOf(n);
-    target = sibs[i + (key === 'ArrowDown' ? 1 : -1)];
-  } else if (!f.parent) {
-    const kids = n.kids; if (kids.length) target = key === 'ArrowRight' ? kids[0] : kids[Math.ceil(kids.length / 2)] || null;
+  if (doc.layout === 'down') {
+    if (key === 'ArrowUp') target = p;
+    else if (key === 'ArrowDown') target = open(n)[0];
+    else if (p) target = p.kids[p.kids.indexOf(n) + (key === 'ArrowRight' ? 1 : -1)];
+  } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+    if (p) { const sibs = p.kids.filter((k) => k._dir === n._dir); target = sibs[sibs.indexOf(n) + (key === 'ArrowDown' ? 1 : -1)]; }
   } else {
     const toward = key === 'ArrowRight' ? 1 : -1;
-    if (toward === dirOf) target = !n.collapsed && n.kids[0]; else target = f.parent;
+    if (!p) target = open(n).find((k) => k._dir === toward);
+    else if (toward === (n._dir || 1)) target = open(n)[0]; else target = p;
   }
   if (target) { sel = target.id; render(); }
 }
@@ -447,8 +490,11 @@ document.addEventListener('keydown', (e) => {
 }, true);
 
 // ---------- files / export ----------
-function toOutline(n, d = 0) { return '  '.repeat(d) + '- ' + n.text.replace(/\n/g, ' ') + '\n' + (n.note ? '  '.repeat(d + 1) + '> ' + n.note.replace(/\n/g, ' ') + '\n' : '') + n.kids.map((k) => toOutline(k, d + 1)).join(''); }
-async function saveOutline() { const r = await window.host.saveFile({ name: (doc.title || 'map') + '.md', filters: [['Markdown', ['md', 'txt']]], data: new TextEncoder().encode(toOutline(doc.root)) }); if (r) toast('Saved ' + r.name); }
+function toOutline(n, d = 0) { return '  '.repeat(d) + '- ' + n.text.replace(/\r?\n/g, ' ') + '\n' + (n.note ? '  '.repeat(d + 1) + '> ' + n.note.replace(/\r?\n/g, ' ') + '\n' : '') + n.kids.map((k) => toOutline(k, d + 1)).join(''); }
+async function saveOutline() {
+  try { const r = await window.host.saveFile({ name: (doc.title || 'map') + '.md', filters: [['Markdown', ['md', 'txt']]], data: new TextEncoder().encode(toOutline(doc.root)) }); if (r) toast('Saved ' + r.name); }
+  catch (e) { toast('Not saved. ' + cleanErr(e), 6000); }
+}
 function showOutline() {
   if (document.querySelector('.modal-back')) return;
   const ta = h('textarea', { 'aria-label': 'Outline text', rows: 16, class: 'otext', readonly: true }); ta.value = toOutline(doc.root);
@@ -456,16 +502,62 @@ function showOutline() {
     h('div', { class: 'row mact' }, btn('Close', () => close()), btn('Save as text', () => saveOutline(), 'primary'))));
   const close = dlgCloser(back); document.body.append(back);
 }
-const cleanNode = (n, depth = 0) => ({ id: String(n.id || uid()), text: String(n.text ?? ''), collapsed: !!n.collapsed, color: /^#[0-9a-f]{6}$/i.test(n.color) ? n.color : '', note: String(n.note || ''), icon: ICONS.includes(n.icon) ? n.icon : '', kids: depth > 60 || !Array.isArray(n.kids) ? [] : n.kids.map((k) => cleanNode(k, depth + 1)) });
+// Reads a .branchout file. A valid file from any version opens exactly as it was written (a missing title, layout or
+// icon just takes its default). Anything else that can be kept is repaired and reported in `fixed`, so the map then counts
+// as unsaved; a file that is not a map at all throws a plain message.
+const KEYS = ['id', 'text', 'collapsed', 'color', 'note', 'icon', 'kids'];
+function parseMap(bytes) {
+  const t = new TextDecoder().decode(bytes).replace(/^\ufeff/, '');
+  if (!t.trim()) throw new Error('the file is empty.');
+  const notMap = () => new Error('this is not a Branchout map, or the file is damaged.');
+  const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  let d; try { d = JSON.parse(t); } catch (e) { if (e instanceof RangeError) throw new Error('the map is nested too deeply.'); throw notMap(); }
+  if (!isObj(d) || !isObj(d.root)) throw notMap();
+  let fixed = false; const fix = () => { fixed = true; };
+  const ids = new Set();
+  const node = (n) => {
+    if (Object.keys(n).some((k) => !KEYS.includes(k))) fix();
+    let id = n.id; if (typeof id !== 'string' || !id || ids.has(id)) { fix(); do id = uid(); while (ids.has(id)); } ids.add(id);
+    const str = (v) => (typeof v === 'string' ? v : (fix(), typeof v === 'number' ? String(v) : ''));
+    const text = str(n.text);
+    const note = n.note === undefined ? '' : str(n.note);
+    const collapsed = n.collapsed === undefined ? false : typeof n.collapsed === 'boolean' ? n.collapsed : (fix(), !!n.collapsed);
+    const color = n.color === undefined || n.color === '' ? '' : /^#[0-9a-f]{6}$/i.test(n.color) ? n.color : (fix(), '');
+    const icon = n.icon === undefined || n.icon === '' ? '' : ICONS.includes(n.icon) ? n.icon : (fix(), '');
+    let kids = [];
+    if (Array.isArray(n.kids)) for (const k of n.kids) { if (isObj(k)) kids.push(node(k)); else fix(); }
+    else if (n.kids !== undefined) fix();
+    return { id, text, collapsed, color, note, icon, kids };
+  };
+  let root; try { root = node(d.root); } catch (e) { if (e instanceof RangeError) throw new Error('the map is nested too deeply.'); throw e; }
+  const title = d.title === undefined ? 'Untitled' : typeof d.title === 'string' ? d.title : (fix(), typeof d.title === 'number' ? String(d.title) : 'Untitled');
+  const LAY = ['map', 'right', 'left', 'down'];
+  const lay = d.layout === undefined ? 'map' : LAY.includes(d.layout) ? d.layout : (fix(), 'map');
+  return { doc: { title, layout: lay, root }, fixed };
+}
 async function openDoc(dropped) {
-  const f = (dropped && dropped.data) ? dropped : (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; if (!f) return;
-  try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); const root = cleanNode(d.root); endEditing(); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root }; fileName = f.name; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; render(); fit(); }
-  catch (e) { toast('Cannot open: ' + e.message); }
+  if (!okToDiscard()) return;
+  let f;
+  if (dropped && dropped.data) f = dropped;
+  else { try { f = (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; } catch (e) { toast(cleanErr(e), 6000); return; } }
+  if (!f) return;
+  let m; try { m = parseMap(f.data); } catch (e) { toast(`Cannot open "${f.name}": ${e.message}`, 6000); return; }
+  const old = { doc, sel, undoS, redoS, fileName, savedSnap };
+  try { endEditing(); doc = m.doc; fileName = f.name; sel = doc.root.id; undoS = []; redoS = []; savedSnap = m.fixed ? '' : snapshot(); render(); fit(); }
+  catch (e) {
+    ({ doc, sel, undoS, redoS, fileName, savedSnap } = old); render();
+    toast(`Cannot open "${f.name}": ` + (e instanceof RangeError ? 'the map is nested too deeply.' : cleanErr(e)), 6000); return;
+  }
+  if (m.fixed) toast('Some items in this file were repaired.', 5000);
 }
 async function saveDoc() {
   const clean = (n) => ({ id: n.id, text: n.text, collapsed: n.collapsed, color: n.color, note: n.note, icon: n.icon || '', kids: n.kids.map(clean) });
-  const r = await window.host.saveFile({ name: (doc.title || 'map') + '.branchout', filters: [['Branchout map', ['branchout']]], data: new TextEncoder().encode(JSON.stringify({ title: doc.title, layout: doc.layout || 'map', root: clean(doc.root) }, null, 1)) });
-  if (r) { savedSnap = snapshot(); fileName = r.name; toast('Saved ' + r.name); renderStatus(); }
+  // what is written is the map as it is now; a change made while the Save dialog is open stays unsaved
+  const snap = snapshot();
+  const data = new TextEncoder().encode(JSON.stringify({ title: doc.title, layout: doc.layout || 'map', root: clean(doc.root) }, null, 1));
+  let r; try { r = await window.host.saveFile({ name: (doc.title || 'map') + '.branchout', filters: [['Branchout map', ['branchout']]], data }); }
+  catch (e) { toast('Not saved. ' + cleanErr(e), 6000); return; }
+  if (r) { savedSnap = snap; fileName = r.name; toast('Saved ' + r.name); renderStatus(); }
 }
 function exportSvgString() {
   const b = lastBounds, pad = 30;
@@ -478,12 +570,17 @@ function exportSvgString() {
 }
 async function exportImg(kind) {
   const { str, w, h: hh } = exportSvgString();
-  if (kind === 'svg') { const r = await window.host.saveFile({ name: (doc.title || 'map') + '.svg', filters: [['SVG', ['svg']]], data: new TextEncoder().encode(str) }); if (r) toast('Saved ' + r.name); return; }
-  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str); await img.decode();
-  const cv = document.createElement('canvas'); cv.width = w * 2; cv.height = hh * 2; const ctx = cv.getContext('2d'); ctx.scale(2, 2); ctx.drawImage(img, 0, 0, w, hh);
-  const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
-  const res = await window.host.saveFile({ name: (doc.title || 'map') + '.png', filters: [['PNG image', ['png']]], data: new Uint8Array(await blob.arrayBuffer()) });
-  if (res) toast('Saved ' + res.name);
+  if (kind === 'svg') { try { const r = await window.host.saveFile({ name: (doc.title || 'map') + '.svg', filters: [['SVG', ['svg']]], data: new TextEncoder().encode(str) }); if (r) toast('Saved ' + r.name); } catch (e) { toast('Not exported. ' + cleanErr(e), 7000); } return; }
+  try {
+    const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str); await img.decode();
+    // twice the size for sharpness, but a big map is scaled down so the picture stays within what a canvas can hold
+    const sc = Math.min(2, 16000 / w, 16000 / hh, Math.sqrt(100e6 / (w * hh)));
+    const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.floor(w * sc)); cv.height = Math.max(1, Math.floor(hh * sc)); const ctx = cv.getContext('2d'); ctx.scale(sc, sc); ctx.drawImage(img, 0, 0, w, hh);
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+    if (!blob) { toast('This map is too big for a PNG picture. Try SVG instead.', 6000); return; }
+    const res = await window.host.saveFile({ name: (doc.title || 'map') + '.png', filters: [['PNG image', ['png']]], data: new Uint8Array(await blob.arrayBuffer()) });
+    if (res) toast('Saved ' + res.name);
+  } catch (e) { toast('Not exported. ' + cleanErr(e), 7000); }
 }
 
 // ---------- keyboard shortcuts ----------
@@ -555,10 +652,11 @@ window.addEventListener('resize', fit);
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', async (e) => {
   e.preventDefault();
+  if (document.querySelector('.modal-back')) return; // not while a dialog is open
   const f = [...(e.dataTransfer?.files || [])].find((x) => /.(branchout|json)$/i.test(x.name)); if (!f) { toast('Drop a .branchout file to open it'); return; }
   openDoc({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
 });
 
-let savedSnap = null;
-setTimeout(() => { if (savedSnap === null) savedSnap = snapshot(); }, 0);
-window.addEventListener('beforeunload', (e) => { if (savedSnap !== null && snapshot() !== savedSnap) { e.preventDefault(); e.returnValue = ''; } });
+savedSnap = snapshot(); renderStatus();
+// closing the window with unsaved changes: main.js asks (will-prevent-unload)
+window.addEventListener('beforeunload', (e) => { if (hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
