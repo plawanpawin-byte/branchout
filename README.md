@@ -36,29 +36,16 @@ You build it mostly from the keyboard: press a key to add a topic next to or und
 2. Press **Tab** to add a child topic under the selected one, or **Enter** to add a sibling beside it.
 3. Choose an outline export to see your map as an indented list of text.
 
-## What is new in 1.0.14
+## What is new in 1.0.15 (beta)
 
-A new look inspired by Google's own tools (AI Studio, Colab, Gemini): a calm dark charcoal theme, rounded pill buttons, a soft blue accent and roomier spacing. The app icon is now a colour logo so you can find Branchout at a glance in the Start menu and in the Lookout launcher. All screenshots below were taken again with the new look. The program now shows under its own name (not Electron) in Task Manager and the taskbar.
+[Download the 1.0.15 beta](https://github.com/plawanpawin-byte/branchout/releases/tag/v1.0.15). The screenshots below still show the older layout.
 
-## In plain words
-
-Branchout is a **mind-mapping** program. A mind map starts with one idea in the middle (for example "Holiday plan"). From it you grow branches ("Flights", "Hotels", "Food"), and from each branch you grow smaller branches. It is a way of thinking that looks like a tree and is much easier to scan than a long list.
-
-You build it mostly from the keyboard: press a key to add a topic next to or under the current one, type a name, and keep going. You can add notes, colours and icons, **collapse** branches you are not working on, and finally turn the whole map into a picture or a plain-text **outline** you can paste into an email.
-
-**Not for:** Branchout shows one idea tree. For boxes and arrows between any shapes use Chartout, and for tasks with dates use Planout.
-
-## Who it is for
-
-- **Anyone planning something**: a trip, an essay, a presentation, a project.
-- **Students** summarising a chapter as a map for revision.
-- **Writers** who start with ideas and want to turn them into a structured outline.
-
-## Try it in 3 steps
-
-1. Open Branchout and type a name for the centre topic.
-2. Press **Tab** to add a child topic under the selected one, or **Enter** to add a sibling beside it.
-3. Choose an outline export to see your map as an indented list of text.
+- A new Google-style layout: the map name in the top bar, a Details panel with the four layouts as pictures, a floating topic toolbar and a keyboard shortcuts window.
+- Closing the window with unsaved changes now asks first. New, Open and dropping a file ask too.
+- Saving writes a temporary file first, and read-only or locked files give a plain message.
+- Shift+Tab and F6 move the keyboard out of the map to the buttons and panels.
+- Many fixes to undo and redo, damaged files, exports, navigation and keyboard shortcuts.
+- Maps saved by earlier versions open unchanged.
 
 ## See it in action
 
