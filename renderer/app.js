@@ -105,6 +105,14 @@ const titleInput = h('input', { type: 'text', class: 'tbtitle', maxlength: 120, 
     if (e.key === 'Escape') { if (titleOld !== null) doc.title = titleOld; e.target.value = doc.title; e.target.blur(); titleDone(); }
   } });
 function syncTitle() { if (document.activeElement !== titleInput) titleInput.value = doc.title || ''; }
+// before another map replaces this one: drop any half-finished typing in the title or the Details panel, so it can
+// not land in the new map's undo history, and let go of the field so the new map's values show in it
+function endEditing() {
+  fieldSnap = null; titleOld = null; titleSnap = null;
+  const a = document.activeElement;
+  if (a && a.matches('input,textarea') && !a.closest('.modal-back')) a.blur();
+  fieldSnap = null; titleOld = null; titleSnap = null;
+}
 
 // small menus (Export) anchored under a button; Esc, an outside click or focus leaving closes them
 let fly = null, flyAnchor = null;
@@ -112,7 +120,7 @@ function closeFly(refocus) { if (fly) { fly.remove(); fly = null; } const a = fl
 function openMenu(anchor, id, items, kb) {
   const was = fly && fly.dataset.g === 'menu:' + id; closeFly(); if (was) return;
   fly = h('div', { class: 'fly menu', role: 'menu', 'data-g': 'menu:' + id });
-  for (const [ic, label, fn] of items) fly.append(h('button', { class: 'fi', role: 'menuitem', onclick: () => { closeFly(); fn(); } }, icon(ic, 20), h('span', { class: 'fl', text: label })));
+  for (const [ic, label, fn] of items) fly.append(h('button', { class: 'fi', role: 'menuitem', onclick: (e) => { closeFly(e.detail === 0); fn(); } }, icon(ic, 20), h('span', { class: 'fl', text: label })));
   fly.style.position = 'fixed'; document.body.append(fly);
   const r = anchor.getBoundingClientRect(), w = fly.offsetWidth;
   fly.style.top = (r.bottom + 6) + 'px'; fly.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
@@ -135,10 +143,12 @@ toolbar.append(titleInput, h('span', { class: 'grow' }),
   exportBtn, tbtn('Keyboard shortcuts', 'keyboard', () => showHelp(), '', 'Keyboard shortcuts (?)'),
   tbtn('Save', 'save', saveDoc, 'primary', 'Save (Ctrl+S)'));
 
-// floating toolbar at the bottom of the canvas. Mouse clicks on it keep the keyboard focus where it was.
-const dk = (ic, label, key, fn) => h('button', { class: 'dk', title: label + (key ? ' (' + key + ')' : ''), 'aria-label': label, onclick: fn, onpointerdown: (e) => e.preventDefault() }, icon(ic, 20));
+// floating toolbar at the bottom of the canvas. A mouse press on it does not take focus, and it lets go of a button
+// that still had keyboard focus, so Enter or Space can not press that older button afterwards.
+const dockDown = (e) => { e.preventDefault(); const a = document.activeElement; if (a && a !== document.body && !a.closest('.modal-back')) a.blur(); };
+const dk = (ic, label, key, fn) => h('button', { class: 'dk', title: label + (key ? ' (' + key + ')' : ''), 'aria-label': label, onclick: fn, onpointerdown: dockDown }, icon(ic, 20));
 const bCollapse = dk('fold', 'Collapse', 'Space', () => toggleCollapse());
-const zoomPct = h('button', { class: 'zk zpct', title: 'Zoom to 100%', 'aria-label': 'Zoom to 100%', onclick: () => zoomBy(1 / zoom), onpointerdown: (e) => e.preventDefault(), text: '100%' });
+const zoomPct = h('button', { class: 'zk zpct', title: 'Zoom to 100%', 'aria-label': 'Zoom to 100%', onclick: () => zoomBy(1 / zoom), onpointerdown: dockDown, text: '100%' });
 const dock = h('div', { class: 'dock', role: 'toolbar', 'aria-label': 'Topic tools' },
   h('div', { class: 'dg' }, dk('child', 'Add child', 'Tab', () => addChild()), dk('sibling', 'Add sibling', 'Enter', () => addSibling()), dk('edit', 'Edit', 'F2', () => editSel()),
     bCollapse, dk('unfold', 'Expand all', '', () => expandAll()), dk('del', 'Delete', 'Del', () => del())),
@@ -154,7 +164,11 @@ function refreshDock() {
 function phead(title, side) {
   const hide = 'Hide ' + title.toLowerCase() + ' panel';
   return h('div', { class: 'phead' }, h('h2', { class: 'ptitle', text: title }),
-    h('button', { class: 'pbtn', title: hide, 'aria-label': hide, onclick: () => { if (window.lkPanel) window.lkPanel(side); } }, icon('panr', 20)));
+    h('button', { class: 'pbtn', title: hide, 'aria-label': hide, onclick: (e) => {
+      if (!window.lkPanel) return; window.lkPanel(side);
+      // from the keyboard, focus goes to the grip that brings the panel back (the button itself is now hidden)
+      if (e.detail === 0) { const g = document.querySelector(`.grip[data-side="${side}"]`); if (g) g.focus(); }
+    } }, icon('panr', 20)));
 }
 
 const svg = sv('svg', { width: '100%', height: '100%', style: 'display:block;touch-action:none' });
@@ -257,7 +271,9 @@ function render(panel = true) {
     const rx = n._d === 0 ? n._h / 2 : 8;
     // the selection ring is its own shape (data-selring), so exports can drop it
     if (sel === n.id) g.append(sv('rect', { 'data-selring': '1', x: n._x - 4, y: top - 4, width: n._w + 8, height: n._h + 8, rx: rx + 4, fill: 'none', stroke: '#a8c7fa', 'stroke-width': 2.5 }));
-    g.append(sv('rect', { x: n._x, y: top, width: n._w, height: n._h, rx, fill, stroke: n.color ? 'none' : def.stroke, 'stroke-width': 1 }));
+    // pale fills get a soft dark outline so they still have an edge on the white background of exports
+    const pale = lum(fill) > 200;
+    g.append(sv('rect', { x: n._x, y: top, width: n._w, height: n._h, rx, fill, stroke: pale ? '#80868b' : n.color ? 'none' : def.stroke, 'stroke-width': 1 }));
     const t = sv('text', { 'text-anchor': 'middle', fill: ink, 'font-size': n._fs, 'font-weight': n._d < 2 ? 600 : 400, 'font-family': 'Segoe UI, Arial, sans-serif', style: 'pointer-events:none' });
     const tcx = n._x + n._w / 2 + (n.icon ? 12 : 0);
     n._lines.forEach((ln, i) => { const ts = sv('tspan', { x: tcx, y: n._cy - ((n._lines.length - 1) * n._fs * 1.25) / 2 + i * n._fs * 1.25 + n._fs * 0.35 }); ts.textContent = ln; t.append(ts); });
@@ -371,7 +387,7 @@ function editSel() {
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ok(); } if (e.key === 'Escape') { e.preventDefault(); close(); } });
   const close = dlgCloser(back); document.body.append(back); ta.focus(); ta.select();
 }
-function newDoc() { if (count(doc.root) > 1 && !confirm('Discard the current map?')) return; doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; fileName = ''; render(); fit(); }
+function newDoc() { if (count(doc.root) > 1 && !confirm('Discard the current map?')) return; endEditing(); doc = { title: 'Untitled', layout: 'map', root: mk('Central idea') }; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; fileName = ''; render(); fit(); }
 function move(key) {
   const f = find(sel); if (!f) return; const n = f.n;
   const dirOf = n._dir || 1; // side of the root
@@ -406,6 +422,8 @@ document.addEventListener('keydown', (e) => {
   // Save and Open also work while typing in the Details panel (leaving the field keeps what was typed)
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'o') && e.target.matches('input,textarea,select') && !document.querySelector('.modal-back')) { e.preventDefault(); e.target.blur(); if (k === 's') saveDoc(); else openDoc(); return; }
   if (e.target.matches('input,textarea,select,[contenteditable]') || document.querySelector('.modal-back') || fly) return;
+  // a focused panel grip uses Enter, Space and the arrows itself (fold, resize); Tab moves on from it as usual
+  if (e.target.closest('.grip') && (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab' || e.key.startsWith('Arrow'))) return;
   // a button focused from the keyboard keeps Tab, Enter and Space for itself; every other shortcut still works
   if (e.target.matches('button') && (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') && e.target.matches(':focus-visible')) return;
   if (k === 'Tab' || e.key === 'Tab') { e.preventDefault(); addChild(); }
@@ -441,7 +459,7 @@ function showOutline() {
 const cleanNode = (n, depth = 0) => ({ id: String(n.id || uid()), text: String(n.text ?? ''), collapsed: !!n.collapsed, color: /^#[0-9a-f]{6}$/i.test(n.color) ? n.color : '', note: String(n.note || ''), icon: ICONS.includes(n.icon) ? n.icon : '', kids: depth > 60 || !Array.isArray(n.kids) ? [] : n.kids.map((k) => cleanNode(k, depth + 1)) });
 async function openDoc(dropped) {
   const f = (dropped && dropped.data) ? dropped : (await window.host.openFiles({ filters: [['Branchout map', ['branchout', 'json']]] }))[0]; if (!f) return;
-  try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root: cleanNode(d.root) }; fileName = f.name; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; render(); fit(); }
+  try { const d = JSON.parse(new TextDecoder().decode(f.data)); if (!d.root) throw new Error('Not a Branchout file'); const root = cleanNode(d.root); endEditing(); doc = { title: String(d.title || 'Untitled'), layout: ['map', 'right', 'left', 'down'].includes(d.layout) ? d.layout : 'map', root }; fileName = f.name; sel = doc.root.id; undoS = []; savedSnap = snapshot(); redoS = []; render(); fit(); }
   catch (e) { toast('Cannot open: ' + e.message); }
 }
 async function saveDoc() {
@@ -511,6 +529,8 @@ function present() {
   const step = (d) => { i = clamp(i + d, 0, slides.length - 1); draw(); };
   const key = (e) => {
     if (e.key === 'Tab') return; // the dialog focus trap handles Tab
+    // Enter or Space on a focused button (Previous, Next, Stop presenting) presses that button
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('button') && back.contains(e.target)) { e.stopPropagation(); return; }
     if (e.key === 'Escape') { e.preventDefault(); close(); }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); step(1); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); step(-1); }
