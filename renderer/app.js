@@ -111,16 +111,20 @@ document.addEventListener('pointerdown', (e) => {
 let titleOld = null, titleSnap = null;
 function titleDone() { if (titleSnap !== null && snapshot() !== titleSnap) commit(titleSnap); titleOld = null; titleSnap = null; }
 const titleInput = h('input', { type: 'text', class: 'tbtitle', maxlength: 120, title: 'Map title', 'aria-label': 'Map title', placeholder: 'Untitled',
-  onfocus: () => { if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } }, onblur: () => titleDone(),
+  onfocus: () => { titleLimit(); if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } }, onblur: () => titleDone(),
   oninput: (e) => { if (titleOld === null) { titleOld = doc.title || ''; titleSnap = snapshot(); } doc.title = e.target.value; renderStatus(); },
   onchange: (e) => { if (!e.target.value.trim()) { doc.title = 'Untitled'; e.target.value = doc.title; } },
   onkeydown: (e) => {
+    if (e.key === 'F6') return; // F6 moves to the next area, from here too
     e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return; // Enter or Escape that ends an input method's typing belongs to it
     if ((e.ctrlKey || e.metaKey) && !e.altKey && ['s', 'o'].includes(keyOf(e))) { e.preventDefault(); const k = keyOf(e); e.target.blur(); if (k === 's') saveDoc(); else openDoc(); return; }
     if (e.key === 'Enter') { e.target.blur(); titleDone(); }
     if (e.key === 'Escape') { if (titleOld !== null) doc.title = titleOld; e.target.value = doc.title; e.target.blur(); titleDone(); }
   } });
-function syncTitle() { if (document.activeElement !== titleInput) titleInput.value = doc.title || ''; }
+// the length limit is for typing a new title; a longer title from a file can still be edited
+function titleLimit() { titleInput.maxLength = Math.max(120, (titleInput.value || '').length, (doc.title || '').length); }
+function syncTitle() { if (document.activeElement !== titleInput) titleInput.value = doc.title || ''; titleLimit(); }
 // before another map replaces this one: drop any half-finished typing in the title or the Details panel, so it can
 // not land in the new map's undo history, and let go of the field so the new map's values show in it
 function endEditing() {
@@ -419,6 +423,7 @@ function editSel() {
   const back = h('div', { class: 'modal-back' }, h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Edit topic' }, h('h2', { text: 'Edit topic' }), ta,
     h('div', { class: 'msub', text: 'Enter to finish, Shift+Enter for a new line.' }), h('div', { class: 'row mact' }, btn('Cancel', () => close()), btn('OK', ok, 'primary'))));
   ta.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ok(); }
     if (e.key === 'Escape') { e.preventDefault(); close(); }
     // Ctrl+S keeps the typed text and saves
@@ -460,8 +465,20 @@ svg.addEventListener('pointermove', (ev) => { if (!drag) return; panX = drag.px 
 svg.addEventListener('pointerup', () => { drag = null; });
 svg.addEventListener('dblclick', (ev) => { const node = ev.target.closest('[data-id]'); if (node) { sel = node.dataset.id; editSel(); } });
 svg.addEventListener('wheel', (ev) => { ev.preventDefault(); const r = svg.getBoundingClientRect(); if (ev.ctrlKey || ev.metaKey) zoomBy(ev.deltaY < 0 ? 1.1 : 1 / 1.1, ev.clientX - r.left, ev.clientY - r.top); else { panX -= ev.deltaX; panY -= ev.deltaY; applyView(); } }, { passive: false });
+// F6 and Shift+F6 move between the areas of the window: top bar, map, topic tools, Details panel
+const REGIONS = ['bar', 'map', 'dock', 'details'];
+function regionOf(a) { if (!a || a === document.body) return 'map'; if (toolbar.contains(a)) return 'bar'; if (dock.contains(a)) return 'dock'; if (right.contains(a)) return 'details'; return 'map'; }
+function focusRegion(r, last = false) {
+  if (r === 'map') { const a = document.activeElement; if (a && a !== document.body) a.blur(); return true; }
+  const box = r === 'bar' ? toolbar : r === 'dock' ? dock : right;
+  const f = [...box.querySelectorAll('button,input,textarea,select')].filter((n) => !n.disabled && n.offsetParent !== null);
+  if (!f.length) return false; (last ? f[f.length - 1] : f[0]).focus(); return true;
+}
+function nextRegion(d) { let i = REGIONS.indexOf(regionOf(document.activeElement)); for (let t = 0; t < REGIONS.length; t++) { i = (i + d + REGIONS.length) % REGIONS.length; if (focusRegion(REGIONS[i])) return; } }
 document.addEventListener('keydown', (e) => {
   const k = keyOf(e);
+  if (e.isComposing || e.keyCode === 229) return; // keys that belong to an input method
+  if (e.key === 'F6' && !e.ctrlKey && !e.altKey && !e.metaKey && !document.querySelector('.modal-back') && !fly) { e.preventDefault(); nextRegion(e.shiftKey ? -1 : 1); return; }
   // Save and Open also work while typing in the Details panel (leaving the field keeps what was typed)
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'o') && e.target.matches('input,textarea,select') && !document.querySelector('.modal-back')) { e.preventDefault(); e.target.blur(); if (k === 's') saveDoc(); else openDoc(); return; }
   if (e.target.matches('input,textarea,select,[contenteditable]') || document.querySelector('.modal-back') || fly) return;
@@ -469,7 +486,9 @@ document.addEventListener('keydown', (e) => {
   if (e.target.closest('.grip') && (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab' || e.key.startsWith('Arrow'))) return;
   // a button focused from the keyboard keeps Tab, Enter and Space for itself; every other shortcut still works
   if (e.target.matches('button') && (e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') && e.target.matches(':focus-visible')) return;
-  if (k === 'Tab' || e.key === 'Tab') { e.preventDefault(); addChild(); }
+  // Shift+Tab leaves the map backwards, to the top bar; Tab alone adds a child topic
+  if ((k === 'Tab' || e.key === 'Tab') && e.shiftKey) { e.preventDefault(); focusRegion('bar', true); }
+  else if (k === 'Tab' || e.key === 'Tab') { e.preventDefault(); addChild(); }
   else if (e.key === 'Enter') { e.preventDefault(); addSibling(); }
   else if (e.key === 'F2') { e.preventDefault(); editSel(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del(); }
@@ -479,7 +498,7 @@ document.addEventListener('keydown', (e) => {
   else if ((e.ctrlKey || e.metaKey) && k === 'y') { redo(); e.preventDefault(); }
   else if ((e.ctrlKey || e.metaKey) && k === 's') { saveDoc(); e.preventDefault(); }
   else if ((e.ctrlKey || e.metaKey) && k === 'o') { openDoc(); e.preventDefault(); }
-  else if (e.key === '?') { e.preventDefault(); showHelp(); }
+  else if (e.key === '?' || (e.code === 'Slash' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey)) { e.preventDefault(); showHelp(); }
 });
 // Tab stays inside the top dialog
 document.addEventListener('keydown', (e) => {
@@ -507,18 +526,24 @@ function showOutline() {
 // as unsaved; a file that is not a map at all throws a plain message.
 const KEYS = ['id', 'text', 'collapsed', 'color', 'note', 'icon', 'kids'];
 function parseMap(bytes) {
-  const t = new TextDecoder().decode(bytes).replace(/^\ufeff/, '');
+  // bytes that are not UTF-8 are shown as \ufffd and count as a repair
+  let t, badBytes = false;
+  try { t = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) { t = new TextDecoder().decode(bytes); badBytes = true; }
+  t = t.replace(/^\ufeff/, '');
   if (!t.trim()) throw new Error('the file is empty.');
   const notMap = () => new Error('this is not a Branchout map, or the file is damaged.');
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
   let d; try { d = JSON.parse(t); } catch (e) { if (e instanceof RangeError) throw new Error('the map is nested too deeply.'); throw notMap(); }
   if (!isObj(d) || !isObj(d.root)) throw notMap();
-  let fixed = false; const fix = () => { fixed = true; };
+  let fixed = badBytes; const fix = () => { fixed = true; };
+  // a lone surrogate (from a \ud800 escape) is not text and can not be saved as UTF-8: it becomes \ufffd
+  const LONE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+  const txt = (v) => { const r = v.replace(LONE, '\ufffd'); if (r !== v) fix(); return r; };
   const ids = new Set();
   const node = (n) => {
     if (Object.keys(n).some((k) => !KEYS.includes(k))) fix();
-    let id = n.id; if (typeof id !== 'string' || !id || ids.has(id)) { fix(); do id = uid(); while (ids.has(id)); } ids.add(id);
-    const str = (v) => (typeof v === 'string' ? v : (fix(), typeof v === 'number' ? String(v) : ''));
+    let id = typeof n.id === 'string' ? txt(n.id) : n.id; if (typeof id !== 'string' || !id || ids.has(id)) { fix(); do id = uid(); while (ids.has(id)); } ids.add(id);
+    const str = (v) => (typeof v === 'string' ? txt(v) : (fix(), typeof v === 'number' ? String(v) : ''));
     const text = str(n.text);
     const note = n.note === undefined ? '' : str(n.note);
     const collapsed = n.collapsed === undefined ? false : typeof n.collapsed === 'boolean' ? n.collapsed : (fix(), !!n.collapsed);
@@ -530,7 +555,7 @@ function parseMap(bytes) {
     return { id, text, collapsed, color, note, icon, kids };
   };
   let root; try { root = node(d.root); } catch (e) { if (e instanceof RangeError) throw new Error('the map is nested too deeply.'); throw e; }
-  const title = d.title === undefined ? 'Untitled' : typeof d.title === 'string' ? d.title : (fix(), typeof d.title === 'number' ? String(d.title) : 'Untitled');
+  const title = d.title === undefined ? 'Untitled' : typeof d.title === 'string' ? txt(d.title) : (fix(), typeof d.title === 'number' ? String(d.title) : 'Untitled');
   const LAY = ['map', 'right', 'left', 'down'];
   const lay = d.layout === undefined ? 'map' : LAY.includes(d.layout) ? d.layout : (fix(), 'map');
   return { doc: { title, layout: lay, root }, fixed };
@@ -553,9 +578,11 @@ async function openDoc(dropped) {
 async function saveDoc() {
   const clean = (n) => ({ id: n.id, text: n.text, collapsed: n.collapsed, color: n.color, note: n.note, icon: n.icon || '', kids: n.kids.map(clean) });
   // what is written is the map as it is now; a change made while the Save dialog is open stays unsaved
-  const snap = snapshot();
-  const data = new TextEncoder().encode(JSON.stringify({ title: doc.title, layout: doc.layout || 'map', root: clean(doc.root) }, null, 1));
-  let r; try { r = await window.host.saveFile({ name: (doc.title || 'map') + '.branchout', filters: [['Branchout map', ['branchout']]], data }); }
+  let snap, r;
+  try {
+    snap = snapshot();
+    const data = new TextEncoder().encode(JSON.stringify({ title: doc.title, layout: doc.layout || 'map', root: clean(doc.root) }, null, 1));
+    r = await window.host.saveFile({ name: (doc.title || 'map') + '.branchout', filters: [['Branchout map', ['branchout']]], data }); }
   catch (e) { toast('Not saved. ' + cleanErr(e), 6000); return; }
   if (r) { savedSnap = snap; fileName = r.name; toast('Saved ' + r.name); renderStatus(); }
 }
@@ -565,7 +592,8 @@ function exportSvgString() {
   root.append(sv('rect', { x: b.x - pad, y: b.y - pad, width: b.w + pad * 2, height: b.h + pad * 2, fill: '#ffffff' }));
   const c = world.cloneNode(true); c.removeAttribute('transform');
   c.querySelectorAll('[data-selring]').forEach((n) => n.remove());
-  c.querySelectorAll('[data-fold]').forEach((n) => n.remove());
+  // fold buttons go, but a folded topic keeps its + marker so the picture shows that more is hidden
+  c.querySelectorAll('[data-fold]').forEach((n) => { const f = find(n.dataset.fold); if (f && f.n.collapsed) { n.removeAttribute('data-fold'); n.removeAttribute('style'); n.setAttribute('data-folded', '1'); } else n.remove(); });
   root.append(c); return { str: new XMLSerializer().serializeToString(root), w: b.w + pad * 2, h: b.h + pad * 2 };
 }
 async function exportImg(kind) {
@@ -585,7 +613,7 @@ async function exportImg(kind) {
 
 // ---------- keyboard shortcuts ----------
 const SHORTCUTS = [
-  ['Topics', [[['Tab'], 'Add a child topic'], [['Enter'], 'Add a sibling topic'], [['F2'], 'Edit the topic'], [['Double-click'], 'Edit the topic'], [['Del'], 'Delete the topic'], [['Space'], 'Collapse or expand'], [['Arrows'], 'Move the selection']]],
+  ['Topics', [[['Tab'], 'Add a child topic'], [['Enter'], 'Add a sibling topic'], [['F2'], 'Edit the topic'], [['Double-click'], 'Edit the topic'], [['Del'], 'Delete the topic'], [['Space'], 'Collapse or expand'], [['Arrows'], 'Move the selection'], [['Shift', 'Tab'], 'Leave the map, to the top bar'], [['F6'], 'Next area of the window']]],
   ['File and edit', [[['Ctrl', 'Z'], 'Undo'], [['Ctrl', 'Y'], 'Redo'], [['Ctrl', 'S'], 'Save'], [['Ctrl', 'O'], 'Open']]],
   ['View', [[['Drag'], 'Pan the map'], [['Scroll'], 'Pan the map'], [['Ctrl', 'Scroll'], 'Zoom'], [['?'], 'This list']]],
   ['Presentation', [[['Right', 'Space'], 'Next topic'], [['Left'], 'Previous topic'], [['Esc'], 'Stop presenting']]],
@@ -653,10 +681,11 @@ window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', async (e) => {
   e.preventDefault();
   if (document.querySelector('.modal-back')) return; // not while a dialog is open
-  const f = [...(e.dataTransfer?.files || [])].find((x) => /.(branchout|json)$/i.test(x.name)); if (!f) { toast('Drop a .branchout file to open it'); return; }
+  const f = [...(e.dataTransfer?.files || [])].find((x) => /\.(branchout|json)$/i.test(x.name)); if (!f) { toast('Drop a .branchout file to open it'); return; }
   openDoc({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
 });
 
 savedSnap = snapshot(); renderStatus();
 // closing the window with unsaved changes: main.js asks (will-prevent-unload)
-window.addEventListener('beforeunload', (e) => { if (hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
+// if the check itself fails, the window still asks rather than risk losing work
+window.addEventListener('beforeunload', (e) => { let ask = true; try { ask = hasUnsaved(); } catch (_) {} if (ask) { e.preventDefault(); e.returnValue = ''; } });
